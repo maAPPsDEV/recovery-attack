@@ -38,6 +38,7 @@ address = rightmost_20_bytes(keccak(RLP(sender address, nonce)))
 ```
 
 Where:
+
 - `sender address`: is the contract or wallet address that created this new contract
 - `nonce`: is the number of transactions sent from the `sender address` OR, **if the sender is a factory contract, the `nonce` is the number of contract-creations made by this account.**
 - `RLP`: is an encoder on data structure, and is the default to serialize objects in Ethereum.
@@ -51,9 +52,11 @@ Let’s calculate the address of a new contract created by an existing contract 
 
 1. From [documentation](https://github.com/ethereum/wiki/wiki/RLP), the RLP encoding of a 20-byte address is: `0xd6`, `0x94`. And for all integers less than `0x7f`, its encoding is just its own byte value. So the RLP of 1 is `0x01`.
 2. In Remix, compute the following:
+
 ```
 address public a = address(keccak256(0xd6, 0x94, YOUR_ADDR, 0x01));
 ```
+
 3. This yields `0x048559A2982f50c268B80E14b1A98A1524295016`, which is presumably the first address of the new smart contract the existing contract will deploy.
 4. To get subsequent contract addresses, simply increment the nonce.
 
@@ -68,25 +71,53 @@ address public a = address(keccak256(0xd6, 0x94, YOUR_ADDR, 0x01));
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.0;
+pragma solidity >=0.4.22 <0.9.0;
 
-contract Token {
-  mapping(address => uint256) balances;
-  uint256 public totalSupply;
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-  constructor(uint256 _initialSupply) public {
-    balances[msg.sender] = totalSupply = _initialSupply;
+contract Recovery {
+  //generate tokens
+  function generateToken(string memory _name, uint256 _initialSupply) public {
+    new SimpleToken(_name, msg.sender, _initialSupply);
+  }
+}
+
+contract SimpleToken {
+  using SafeMath for uint256;
+  // public variables
+  string public name;
+  mapping(address => uint256) public balances;
+
+  // constructor
+  constructor(
+    string memory _name,
+    address _creator,
+    uint256 _initialSupply
+  ) public {
+    name = _name;
+    balances[_creator] = _initialSupply;
   }
 
-  function transfer(address _to, uint256 _value) public returns (bool) {
-    require(balances[msg.sender] - _value >= 0);
-    balances[msg.sender] -= _value;
-    balances[_to] += _value;
-    return true;
+  // collect ether in return for tokens
+  fallback() external payable {
+    balances[msg.sender] = msg.value.mul(10);
   }
 
-  function balanceOf(address _owner) public view returns (uint256 balance) {
-    return balances[_owner];
+  // get balance of an account
+  function balanceOf(address _account) public view returns (uint256) {
+    return balances[_account];
+  }
+
+  // allow transfers of tokens
+  function transfer(address _to, uint256 _amount) public {
+    require(balances[msg.sender] >= _amount);
+    balances[msg.sender] = balances[msg.sender].sub(_amount);
+    balances[_to] = _amount;
+  }
+
+  // clean up after ourselves
+  function destroy(address payable _to) public {
+    selfdestruct(_to);
   }
 }
 
@@ -129,9 +160,9 @@ Compiling your contracts...
 
 
   Contract: Hacker
-    √ should steal countless of tokens (377ms)
+    √ should destroy token contract (769ms)
 
 
-  1 passing (440ms)
+  1 passing (853ms)
 
 ```

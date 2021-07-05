@@ -13,5 +13,8 @@ contract Hacker {
     hacker = payable(msg.sender);
   }
 
+  /**
+   * @dev See test files for the game.
+   */
   function attack(address _target) public onlyHacker {}
 }
